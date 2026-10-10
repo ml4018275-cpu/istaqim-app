@@ -1,0 +1,15 @@
+{
+  "source": "A7med3bdulBaset/hadith-json, tag v1.2.0",
+  "urlBase": "https://raw.githubusercontent.com/A7med3bdulBaset/hadith-json/v1.2.0/db/by_book/the_9_books",
+  "files": [
+    "bukhari.json",
+    "muslim.json"
+  ],
+  "counts": {
+    "bukhari": 7277,
+    "muslim": 7459
+  },
+  "license": "Check the repository LICENSE before publishing (not verified here)",
+  "verified": "JSON parses, counts above 5000, 99%+ items contain Arabic text",
+  "note": "Saved unmodified. Do not edit. Grading and isnad are as in the source."
+}
