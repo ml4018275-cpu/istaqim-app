@@ -1,0 +1,66 @@
+name: Fetch Sunan
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download, verify, save
+        run: |
+          node --input-type=module <<'EOF'
+          import { mkdir, writeFile } from 'node:fs/promises';
+          const BASE = 'https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1';
+          const OUT = 'artifacts/istaqim/data/hadith-sharif';
+          const slugs = ['ara-abudawud', 'ara-tirmidhi', 'ara-nasai', 'ara-ibnmajah', 'ara-malik'];
+          const AR = /[\u0600-\u06FF]/;
+          const edRes = await fetch(`${BASE}/editions.json`);
+          if (!edRes.ok) { console.log('editions.json failed', edRes.status); process.exit(1); }
+          const edText = await edRes.text();
+          const missing = slugs.filter((s) => !edText.includes(`"${s}"`));
+          if (missing.length) { console.log('Editions not listed by the source:', missing.join(',')); process.exit(1); }
+          const raws = {};
+          const counts = {};
+          const gradeLabels = {};
+          for (const s of slugs) {
+            const res = await fetch(`${BASE}/editions/${s}.json`);
+            if (!res.ok) { console.log(`FAILED ${s}: HTTP ${res.status}`); process.exit(1); }
+            const raw = await res.text();
+            const data = JSON.parse(raw);
+            const list = Array.isArray(data) ? data : data.hadiths;
+            if (!Array.isArray(list)) { console.log(`${s}: unexpected shape. Keys:`, Object.keys(data)); process.exit(1); }
+            const withArabic = list.filter((h) => AR.test(h.text ?? JSON.stringify(h))).length;
+            const graded = list.filter((h) => Array.isArray(h.grades) && h.grades.length > 0);
+            for (const h of graded) for (const g of h.grades) gradeLabels[g.grade] = (gradeLabels[g.grade] || 0) + 1;
+            console.log(`${s}: items=${list.length}, withArabic=${withArabic}, graded=${graded.length}, keys=${Object.keys(list[0]).join(',')}`);
+            if (list.length < 1000 || withArabic / list.length < 0.99) { console.log(`${s}: VERIFICATION FAILED`); process.exit(1); }
+            raws[s] = raw;
+            counts[s] = { items: list.length, graded: graded.length };
+          }
+          console.log('Grade labels found:', gradeLabels);
+          await mkdir(OUT, { recursive: true });
+          for (const s of slugs) await writeFile(`${OUT}/${s}.json`, raws[s]);
+          await writeFile(`${OUT}/SOURCE.json`, JSON.stringify({
+            source: 'fawazahmed0/hadith-api @1',
+            urlBase: BASE,
+            editions: slugs,
+            counts,
+            gradeLabels,
+            license: 'Check the repository LICENSE before publishing (not verified here)',
+            verified: 'JSON parses, 1000+ items per edition, 99%+ contain Arabic text',
+            note: 'Saved unmodified. Grades are exactly as in the source data. Do not edit.'
+          }, null, 2));
+          console.log('Saved');
+          EOF
+      - name: Commit data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add artifacts/istaqim/data
+          git diff --cached --quiet || git commit -m "Add sunan and muwatta data"
+          git push
