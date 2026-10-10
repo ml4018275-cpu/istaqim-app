@@ -1,0 +1,1 @@
+- [Islamic content sourcing](islamic-content-sourcing.md) — verify and cite religious content; never fabricate texts, chains, or claims of completeness.

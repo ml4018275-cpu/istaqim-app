@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Istaqim — استقم"
+description = "An Arabic-first Islamic companion for Damanhour, with offline-ready worship tools, learning sections, prayer support, and daily remembrance."
+version = "1.0.0"
+id = "artifacts/istaqim"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21138
+
+[services.development]
+run = "pnpm --filter @workspace/istaqim run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/istaqim", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/istaqim/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21138"
+BASE_PATH = "/"
