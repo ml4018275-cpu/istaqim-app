@@ -1,0 +1,9 @@
+{
+  "file": "quran.json",
+  "source": "quran-json v3.1.2 (risan/quran-json)",
+  "url": "https://cdn.jsdelivr.net/npm/quran-json@3.1.2/dist/quran.json",
+  "textOrigin": "The Noble Qur'an Encyclopedia (quranenc.com)",
+  "license": "CC-BY-4.0 (as listed in package.json)",
+  "verified": "chapters=114, verses=6236, no empty verse",
+  "note": "Saved unmodified. Do not edit."
+}
