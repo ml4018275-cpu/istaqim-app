@@ -1,0 +1,64 @@
+name: Fetch Hadith
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download, verify, save
+        run: |
+          node --input-type=module <<'EOF'
+          import { mkdir, writeFile } from 'node:fs/promises';
+          const BASE = 'https://raw.githubusercontent.com/A7med3bdulBaset/hadith-json/v1.2.0/db/by_book/the_9_books';
+          const OUT = 'artifacts/istaqim/data/hadith';
+          const books = ['bukhari', 'muslim'];
+          const AR = /[\u0600-\u06FF]/;
+          const results = {};
+          const raws = {};
+          for (const b of books) {
+            const url = `${BASE}/${b}.json`;
+            const res = await fetch(url);
+            if (!res.ok) { console.log(`FAILED ${url}: HTTP ${res.status}`); process.exit(1); }
+            const raw = await res.text();
+            const data = JSON.parse(raw);
+            let list = Array.isArray(data) ? data : data.hadiths;
+            if (!Array.isArray(list)) {
+              console.log(`${b}: unexpected shape. Keys:`, Object.keys(data).slice(0, 15));
+              process.exit(1);
+            }
+            const withArabic = list.filter((h) => AR.test(JSON.stringify(h))).length;
+            console.log(`${b}: items=${list.length}, withArabic=${withArabic}`);
+            console.log(`${b}: sample keys:`, Object.keys(list[0]));
+            if (list.length < 5000 || withArabic / list.length < 0.99) {
+              console.log(`${b}: VERIFICATION FAILED`);
+              process.exit(1);
+            }
+            results[b] = list.length;
+            raws[b] = raw;
+          }
+          await mkdir(OUT, { recursive: true });
+          for (const b of books) await writeFile(`${OUT}/${b}.json`, raws[b]);
+          await writeFile(`${OUT}/SOURCE.json`, JSON.stringify({
+            source: 'A7med3bdulBaset/hadith-json, tag v1.2.0',
+            urlBase: BASE,
+            files: books.map((b) => `${b}.json`),
+            counts: results,
+            license: 'Check the repository LICENSE before publishing (not verified here)',
+            verified: 'JSON parses, counts above 5000, 99%+ items contain Arabic text',
+            note: 'Saved unmodified. Do not edit. Grading and isnad are as in the source.'
+          }, null, 2));
+          console.log('Saved', results);
+          EOF
+      - name: Commit data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add artifacts/istaqim/data
+          git diff --cached --quiet || git commit -m "Add hadith data (verified)"
+          git push
