@@ -64,3 +64,4 @@ jobs:
           git add artifacts/istaqim/data
           git diff --cached --quiet || git commit -m "Add sunan and muwatta data"
           git push
+          
