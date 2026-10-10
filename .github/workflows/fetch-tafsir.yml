@@ -1,0 +1,77 @@
+name: Fetch Tafsir
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download, verify, save
+        run: |
+          node --input-type=module <<'EOF'
+          import { mkdir, writeFile } from 'node:fs/promises';
+          const BASE = 'https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir';
+          const OUT = 'artifacts/istaqim/data/tafsir';
+          const editions = ['ar-tafsir-muyassar', 'ar-tafsir-ibn-kathir'];
+          const AR = /[\u0600-\u06FF]/;
+          async function get(url) {
+            for (let i = 0; i < 3; i++) {
+              const r = await fetch(url);
+              if (r.ok) return await r.text();
+              await new Promise((s) => setTimeout(s, 1500));
+            }
+            throw new Error(`Failed: ${url}`);
+          }
+          const store = {};
+          for (const ed of editions) {
+            store[ed] = {};
+            let badSurahs = [];
+            let totalEntries = 0;
+            for (let start = 1; start <= 114; start += 8) {
+              const nums = [];
+              for (let n = start; n < start + 8 && n <= 114; n++) nums.push(n);
+              const raws = await Promise.all(nums.map((n) => get(`${BASE}/${ed}/${n}.json`)));
+              raws.forEach((raw, i) => {
+                const n = nums[i];
+                let data;
+                try { data = JSON.parse(raw); } catch { badSurahs.push(`${n}: not JSON`); return; }
+                const list = Array.isArray(data) ? data : data.ayahs;
+                if (!Array.isArray(list) || list.length === 0) { badSurahs.push(`${n}: no ayahs array (keys: ${Object.keys(data).join(',')})`); return; }
+                if (!AR.test(raw)) { badSurahs.push(`${n}: no Arabic text`); return; }
+                totalEntries += list.length;
+                store[ed][n] = raw;
+              });
+            }
+            console.log(`${ed}: surahs saved=${Object.keys(store[ed]).length}, entries=${totalEntries}`);
+            if (badSurahs.length) {
+              console.log(`${ed}: VERIFICATION FAILED`);
+              badSurahs.slice(0, 15).forEach((b) => console.log(' -', b));
+              process.exit(1);
+            }
+          }
+          for (const ed of editions) {
+            await mkdir(`${OUT}/${ed}`, { recursive: true });
+            for (const [n, raw] of Object.entries(store[ed])) await writeFile(`${OUT}/${ed}/${n}.json`, raw);
+          }
+          await writeFile(`${OUT}/SOURCE.json`, JSON.stringify({
+            source: 'spa5k/tafsir_api (data via quran.com / QUL)',
+            urlBase: BASE,
+            editions,
+            license: 'Packaging reported as MIT; underlying classical texts reported public domain. Verify in the repository before publishing.',
+            verified: 'All 114 surah files per edition parse, contain an ayahs array and Arabic text',
+            note: 'Saved unmodified, one file per surah. Do not edit.'
+          }, null, 2));
+          console.log('Saved');
+          EOF
+      - name: Commit data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add artifacts/istaqim/data
+          git diff --cached --quiet || git commit -m "Add tafsir data (Muyassar, Ibn Kathir)"
+          git push
